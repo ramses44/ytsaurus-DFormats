@@ -1,24 +1,28 @@
-#include <yt/cpp/mapreduce/interface/client.h>
 #include <util/stream/output.h>
 #include <util/system/user.h>
-#include <yt/cpp/mapreduce/io/job_reader.h>
-#include <yt/cpp/mapreduce/io/job_writer.h>
-#include <yt/cpp/mapreduce/io/skiff_row_table_reader.h>
-#include <yt/cpp/mapreduce/io/node_table_writer.h>
-#include <yt/cpp/mapreduce/interface/config.h>
+
+#include <yt/cpp/mapreduce/interface/client.h>
 
 #include <iostream>
 #include <map>
 
-#include <dformats/skiff_reader.h>
-#include <dformats/skiff_writer.h>
-#include <dformats/arrow_reader.h>
-#include <dformats/arrow_writer.h>
+#include <dformats/skiff/skiff_reader.h>
+#include <dformats/skiff/skiff_writer.h>
+#include <dformats/protobuf/protobuf_reader.h>
+#include <dformats/protobuf/protobuf_writer.h>
+#include <dformats/yson/yson_reader.h>
+#include <dformats/yson/yson_writer.h>
+#include <dformats/arrow/arrow_reader.h>
+#include <dformats/arrow/arrow_writer.h>
+
+#include <dformats/interface/mapreduce.h>
+
 #include <dformats/benchmarks/bench.pb.h>
 
 using namespace NYT;
+using namespace DFormats;
 
-namespace SimpleTwo {
+namespace b2 {
 
 class TBenchmarkMapperYson
     : public IMapper<TTableReader<TNode>, TTableWriter<TNode>>
@@ -40,7 +44,7 @@ public:
 };
 REGISTER_MAPPER(TBenchmarkMapperYson);
 
-class TBenchmarkMapperProto
+class TBenchmarkMapperStaticProto
     : public IMapper<TTableReader<TSimpleTwoMessage>, TTableWriter<TNode>>
 {
 public:
@@ -58,68 +62,28 @@ public:
         writer->Finish();
     }
 };
-REGISTER_MAPPER(TBenchmarkMapperProto);
+REGISTER_MAPPER(TBenchmarkMapperStaticProto);
 
-class TBenchmarkMapperSkiff : public IRawJob {
+class TBenchmarkMapper : public TJob {
 public:
-    Y_SAVELOAD_JOB(InputTableSchemaNode_);
+    template <typename... Args>
+    TBenchmarkMapper(Args&&... args) : TJob(std::forward<Args>(args)...) { }
 
-    TBenchmarkMapperSkiff() = default;
-    TBenchmarkMapperSkiff(const TTableSchema& inputTableSchema) 
-        : InputTableSchemaNode_(inputTableSchema.ToNode()) {}
-
-    void Do(const TRawJobContext& context) override {
-        TUnbufferedFileInput unbufferedInput(context.GetInputFile());
-        TBufferedInput input(&unbufferedInput);
-        TUnbufferedFileOutput unbufferedOutput(context.GetOutputFileList()[0]);
-        TBufferedOutput output(&unbufferedOutput);
-        
-        TSkiffRowReader reader(&input, {TTableSchema::FromNode(InputTableSchemaNode_)});
-        TNodeTableWriter writer(THolder<IProxyOutput>(MakeHolder<TJobWriter>(context.GetOutputFileList())));
-
+    void DoImpl(IRowReader* reader, IRowWriter* writer) {
         size_t totalSize = 0;
-        for (size_t i = 0; reader.IsValid(); reader.Next(), ++i) {
-            auto row = reader.ReadRow();
-
-            totalSize += 8;
-            totalSize += row->GetRaw(1).size();
-        }
-
-        writer.AddRow(TNode()("data", TNode()("total_size", totalSize)), 0);
-        writer.FinishTable(0);
-    }
-
-private:
-    TNode InputTableSchemaNode_;
-};
-REGISTER_RAW_JOB(TBenchmarkMapperSkiff);
-
-class TBenchmarkMapperArrow : public IRawJob {
-public:
-    TBenchmarkMapperArrow() = default;
-    
-    void Do(const TRawJobContext& context) override {
-        TUnbufferedFileInput unbufferedInput(context.GetInputFile());
-        TBufferedInput input(&unbufferedInput);
-        TUnbufferedFileOutput unbufferedOutput(context.GetOutputFileList()[0]);
-        TBufferedOutput output(&unbufferedOutput);
+        for (; reader->IsValid(); reader->Next()) {
+            auto row = reader->ReadRow();
             
-        TArrowRowReader reader(&input);
-        TNodeTableWriter writer(THolder<IProxyOutput>(MakeHolder<TJobWriter>(context.GetOutputFileList())));
-
-        size_t totalSize = 0;
-        for (; reader.IsValid(); reader.Next()) {
-            auto row = reader.ReadRow();
-
             totalSize += 8;
-            totalSize += row->GetData<std::string>(1).size();
+            totalSize += row->GetValue<std::string_view>(1).size();
+
+            writer->WriteRow(std::move(row), 0);
         }
-        
-        writer.AddRow(TNode()("data", TNode()("total_size", totalSize)), 0);
-        writer.FinishTable(0);
+
+        writer->FinishTable(0);
     }
 };
-REGISTER_RAW_JOB(TBenchmarkMapperArrow);
+REGISTER_RAW_JOB(TBenchmarkMapper);
 
 }
 
@@ -128,6 +92,7 @@ int main(int argc, char** argv) {
 
     Y_ENSURE(argc > 1, "Missing `format` argument!");
     TString format = argv[1];
+    int jobCount = argc > 2 ? FromString<int>(argv[2]) : 14;
 
     auto client = CreateClient("127.0.0.1:8000");
     TString inputTable = "//home/simple_two";
@@ -146,41 +111,52 @@ int main(int argc, char** argv) {
             TNode()
             ("schema", outputSchemaNode)));
 
-    if (format == "yson") {
+    MapReduceIOSchema ioSchema = {
+        {inputTableSchema, TTableSchema::FromNode(outputSchemaNode)},
+        Format::Yson,  // For default
+        {0},
+        Format::Yson,
+        {1}
+    };
+
+    if (format == "classic-yson") {
         client->Map(
             TMapOperationSpec()
+                .JobCount(jobCount)
                 .AddInput<TNode>(inputTable)
                 .AddOutput<TNode>(outputTable),
-            new SimpleTwo::TBenchmarkMapperYson);
-    } else if (format == "protobuf") {
+            new b2::TBenchmarkMapperYson);
+    } else if (format == "static-protobuf") {
         client->Map(
             TMapOperationSpec()
+                .JobCount(jobCount)
                 .AddInput<TSimpleTwoMessage>(inputTable)
                 .AddOutput<TNode>(outputTable),
-            new SimpleTwo::TBenchmarkMapperProto);
-    } else if (format == "skiff") {
-        auto skiffTableSchema = SkiffSchemaFromTableSchema(inputTableSchema);
-    
-        auto skiffOptions = NYT::NDetail::TCreateSkiffSchemaOptions();
-        auto inputTableSkiffSchema = NYT::NDetail::CreateSkiffSchema({skiffTableSchema}, skiffOptions);
-    
-        client->RawMap(
-            TRawMapOperationSpec()
-                .AddInput(inputTable)
-                .AddOutput(outputTable)
-                .InputFormat(TFormat(NYT::NDetail::CreateSkiffFormat(inputTableSkiffSchema)))
-                .OutputFormat(TFormat("yson")),
-            new SimpleTwo::TBenchmarkMapperSkiff(inputTableSchema));
-    } else if (format == "arrow") {
-        client->RawMap(
-            TRawMapOperationSpec()
-                .AddInput(inputTable)
-                .AddOutput(outputTable)
-                .InputFormat(TFormat("arrow"))
-                .OutputFormat(TFormat("yson")),
-            new SimpleTwo::TBenchmarkMapperArrow);
+            new b2::TBenchmarkMapperStaticProto);
     } else {
-        ythrow yexception() << "Unknown format \"" + format + "\". It should be yson/skiff/protobuf.";
+        if (format == "dynamic-protobuf") {
+            ioSchema.InputFormat = Format::Protobuf;
+        } else if (format == "skiff") {
+            ioSchema.InputFormat = Format::Skiff;
+        } else if (format == "arrow") {
+            ioSchema.InputFormat = Format::Arrow;
+        } else if (format == "yson") {
+            ioSchema.InputFormat = Format::Yson;
+        } else {
+            ythrow yexception() << "Unknown format \"" << format << 
+                "\". It must be yson/classic-yson/skiff/static-protobuf/dynamic-protobuf/arrow.";
+        }
+
+        auto ioFormats = MakeIOFormats(ioSchema);
+
+        client->RawMap(
+            TRawMapOperationSpec()
+                .JobCount(jobCount)
+                .AddInput(inputTable)
+                .AddOutput(outputTable)
+                .InputFormat(ioFormats.first)
+                .OutputFormat(ioFormats.second),
+            new b2::TBenchmarkMapper(std::move(ioSchema)));
     }
 
     return 0;

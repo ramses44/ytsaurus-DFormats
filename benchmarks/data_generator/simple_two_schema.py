@@ -1,0 +1,1 @@
+[{'name': 'id', 'type': 'uint32', 'required': True}, {'name': 'data', 'type': 'string', 'required': True}]

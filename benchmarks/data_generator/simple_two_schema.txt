@@ -1,0 +1,1 @@
+<schema = [{"name" = "id"; "type" = "uint32"; "required" = %true}; {"name" = "data"; "type" = "string"; "required" = %true}]>

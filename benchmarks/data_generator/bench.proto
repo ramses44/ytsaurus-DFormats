@@ -1004,16 +1004,16 @@ message TThousandNumericMessage {
 }
 
 message TSimpleTenMessage {
-    required int64 column_1 = 1 [(NYT.column_name) = "column_1"];
-    required bool column_2 = 2 [(NYT.column_name) = "column_2"];
+    required int32 column_1 = 1 [(NYT.column_name) = "column_1"];
+    required string column_2 = 2 [(NYT.column_name) = "column_2"];
     required int32 column_3 = 3 [(NYT.column_name) = "column_3"];
-    required double column_4 = 4 [(NYT.column_name) = "column_4"];
-    required string column_5 = 5 [(NYT.column_name) = "column_5"];
-    required uint32 column_6 = 6 [(NYT.column_name) = "column_6"];
-    required uint64 column_7 = 7 [(NYT.column_name) = "column_7"];
-    required string column_8 = 8 [(NYT.column_name) = "column_8"];
-    required bool column_9 = 9 [(NYT.column_name) = "column_9"];
-    required uint32 column_10 = 10 [(NYT.column_name) = "column_10"];
+    required int32 column_4 = 4 [(NYT.column_name) = "column_4"];
+    required int32 column_5 = 5 [(NYT.column_name) = "column_5"];
+    required int64 column_6 = 6 [(NYT.column_name) = "column_6"];
+    required int32 column_7 = 7 [(NYT.column_name) = "column_7"];
+    required int32 column_8 = 8 [(NYT.column_name) = "column_8"];
+    required int64 column_9 = 9 [(NYT.column_name) = "column_9"];
+    required int32 column_10 = 10 [(NYT.column_name) = "column_10"];
 }
 
 message TSimpleTwoMessage {
