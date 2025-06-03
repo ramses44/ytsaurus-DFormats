@@ -1,7 +1,7 @@
 #include "arrow_reader.h"
 #include "arrow_adapter.h"
 
-#include <library/cpp/yson/node/node_io.h> // TODO: remove
+#include <library/cpp/yson/node/node_io.h>
 
 namespace DFormats {
 
