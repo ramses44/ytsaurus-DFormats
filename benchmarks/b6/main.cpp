@@ -1,24 +1,26 @@
-#include <yt/cpp/mapreduce/interface/client.h>
 #include <util/stream/output.h>
 #include <util/system/user.h>
-#include <yt/cpp/mapreduce/io/job_reader.h>
-#include <yt/cpp/mapreduce/io/job_writer.h>
-#include <yt/cpp/mapreduce/io/skiff_row_table_reader.h>
-#include <yt/cpp/mapreduce/io/node_table_writer.h>
-#include <yt/cpp/mapreduce/interface/config.h>
+
+#include <yt/cpp/mapreduce/interface/client.h>
 
 #include <iostream>
 #include <map>
 
-#include <dformats/skiff_reader.h>
-#include <dformats/skiff_writer.h>
-#include <dformats/arrow_reader.h>
-#include <dformats/arrow_writer.h>
-#include <dformats/protobuf_reader.h>
-#include <dformats/protobuf_writer.h>
+#include <dformats/skiff/skiff_reader.h>
+#include <dformats/skiff/skiff_writer.h>
+#include <dformats/protobuf/protobuf_reader.h>
+#include <dformats/protobuf/protobuf_writer.h>
+#include <dformats/yson/yson_reader.h>
+#include <dformats/yson/yson_writer.h>
+#include <dformats/arrow/arrow_reader.h>
+#include <dformats/arrow/arrow_writer.h>
+
+#include <dformats/interface/mapreduce.h>
+
 #include <dformats/benchmarks/bench.pb.h>
 
 using namespace NYT;
+using namespace DFormats;
 
 namespace b6 {
 
@@ -78,7 +80,7 @@ public:
     template <typename... Args>
     TBenchmarkMapper(Args&&... args) : TJob(std::forward<Args>(args)...) { }
 
-    void DoImpl(IRowReader* reader, IRowWriter* writer) {
+    void DoImpl(IRowReader* /* reader */, IRowWriter* writer) {
         auto row = writer->CreateObjectForWrite(0);
 
         row->SetValue<int64_t>(0, -234234324);
@@ -93,7 +95,7 @@ public:
         row->SetValue<uint32_t>(9, 42);
 
         for (size_t i = 0; i < 5'000'000; ++i) {
-            writer->WriteRow(row);
+            writer->WriteRow(row, 0);
         }
 
         writer->FinishTable(0);

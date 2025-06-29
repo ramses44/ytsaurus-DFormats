@@ -38,7 +38,7 @@ public:
             totalSize += row["data"].AsString().size();
         }
 
-        writer->AddRow(TNode()("data", TNode()("total_size", totalSize)));
+        writer->AddRow(TNode()("total_size", totalSize));
         writer->Finish();
     }
 };
@@ -58,7 +58,7 @@ public:
             totalSize += row.data().size();
         }
 
-        writer->AddRow(TNode()("data", TNode()("total_size", totalSize)));
+        writer->AddRow(TNode()("total_size", totalSize));
         writer->Finish();
     }
 };
@@ -76,10 +76,12 @@ public:
             
             totalSize += 8;
             totalSize += row->GetValue<std::string_view>(1).size();
-
-            writer->WriteRow(std::move(row), 0);
         }
 
+        auto outputRow = writer->CreateObjectForWrite(0);
+        outputRow->SetValue("total_size", totalSize);
+        writer->WriteRow(std::move(outputRow), 0);
+        
         writer->FinishTable(0);
     }
 };
@@ -102,7 +104,7 @@ int main(int argc, char** argv) {
     Deserialize(inputTableSchema, client->Get(inputTable + "/@schema"));
 
     auto outputSchemaNode = TNode()
-        .Add(TNode()("name", "data")("type", "any"));
+        .Add(TNode()("name", "total_size")("type", "uint64"));
     
     client->Create(
         outputTable, ENodeType::NT_TABLE, TCreateOptions()
